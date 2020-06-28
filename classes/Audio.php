@@ -58,7 +58,6 @@ class Audio
 
         $output = 'content/' . $index . '_audio.wav';
         $service_url = 'https://api.us-south.text-to-speech.watson.cloud.ibm.com/v1/synthesize';
-
         //não consegui fazer o output do curl php funcionar e por isso coloquei o exec
         exec('curl -X POST -u "apikey:' . Credentials::AUDIO_TXT_TO_SPEECH_API_KEY . '" --header "Content-Type: application/json" --header "Accept: audio/mp3" --data "{\"text\":\"' . str_replace('"', '', $sentence) . '\"}" --output ' . $output . ' "' . $service_url . '"');
 
@@ -66,7 +65,6 @@ class Audio
 
         return $output;
     }
-
 
     private function print_step($text)
     {
