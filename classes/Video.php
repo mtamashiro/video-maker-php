@@ -15,62 +15,111 @@ class Video
         $this->print_step('Iniciando geração de vídeo');
         $this->print_step('tratando imagens');
         $this->convertAllImages();
-        $this->createAllSentenceImages();
+        $this->createAllVideosWithSubtitles();
         $this->createYouTubeThumbnail();
+        $this->concatAllVideos();
 
         return $this->data;
 
     }
 
-    private function createYouTubeThumbnail(){
+
+    private function concatAllVideos()
+    {
+
+        $this->print_step('Iniciando a concatenação dos videos');
+
+        $list_path = 'content/list.txt';
+        $file = fopen($list_path, 'w');
+        $text = '';
+        $output = 'content/final_video.mp4';
+
+        foreach ($this->data as $index => $item) {
+            $text .= 'file ' . str_replace("content/", "", $item['video']) . PHP_EOL;
+        }
+        fwrite($file, $text);
+        fclose($file);
+
+        $loglevel = '-loglevel panic';
+        $makeMovieFfmpeg = "ffmpeg " . $loglevel . " -f concat -safe 0 -i content/list.txt i- content/background_song.mp3  -c copy -y ".$output;
+        print_r(exec($makeMovieFfmpeg, $ret, $err));
+        $this->print_step('Video Finalizado: disponível em :' . $output);
+    }
+
+    private function createAllVideosWithSubtitles()
+    {
+        foreach ($this->data as $index => $item) {
+
+            $this->data[$index]['subtitle'] = $this->createSubtitle($item['sentence'], $item['audio_playtime'], $index);
+            $this->data[$index]['video'] = $this->renderVideoWithFFMPEG($index, $this->data[$index]['subtitle'], $item['audio_playtime']);
+
+        }
+    }
+
+    private function renderVideoWithFFMPEG($index, $subtitle, $playtime)
+    {
+        $this->print_step('Criando video: ' . $index);//
+
+        $playtime = round($playtime);
+        $playtime += 2;
+        $output_without_subtitle = 'content/' . $index . '_video_without_subtitle.mp4';
+        $output = 'content/' . $index . '_video.mp4';
+        $audio_with_silence = 'content/' . $index . '_audio_with_silence.wav';
+
+        //-loglevel panic
+        $loglevel = '-loglevel panic';
+        //$loglevel = '';
+        $makeMovieFfmpeg = "ffmpeg " . $loglevel . "  -framerate 1/" . $playtime . " -vcodec mjpeg -i content/" . $index . "_converted.png -c:v libx264 -r 30 -pix_fmt yuv420p -y " . $output_without_subtitle;
+        print_r(exec($makeMovieFfmpeg, $ret, $err));
+        //add 1 second of silence before
+        $makeMovieFfmpeg = "ffmpeg " . $loglevel . " -i content/silence.wav -i content/silence.wav -i content/" . $index . "_audio.wav -filter_complex [0:0][1:0]concat=n=3:v=0:a=1[out] -map [out] -y " . $audio_with_silence;
+        print_r(exec($makeMovieFfmpeg, $ret, $err));
+        $makeMovieFfmpeg = "ffmpeg " . $loglevel . " -i " . $output_without_subtitle . " -i " . $audio_with_silence . " -vf \"subtitles=" . $subtitle . ":force_style='FontName=Arial,FontSize=14,PrimaryColour=&Hffff00&'\" -c:v libx264 -r 30 -pix_fmt yuv420p -y " . $output;
+        print_r(exec($makeMovieFfmpeg, $ret, $err));
+
+        unlink($output_without_subtitle);
+        unlink($audio_with_silence);
+
+        $this->print_step('Video Criado');//
+        return $output;
+
+    }
+
+    private function createYouTubeThumbnail()
+    {
         $this->print_step('Criando thumbnail');//
         $output_file = "content/thumbnail.png";
         $image = new Imagick('content/0_converted.png');
         $image->adaptiveResizeImage(1280, 720);
         $image->setImageFormat('png');
         file_put_contents($output_file, $image);
-        $this->print_step('thumbnail criada'. $output_file);//
+        $this->print_step('thumbnail criada' . $output_file);//
     }
 
-    private function createAllSentenceImages()
+    private function createSubtitle($sentence, $playtime, $index)
     {
-        foreach ($this->data as $index => $item) {
-            $this->data[$index]['sentence_image'] = $this->createSentenceImage($index);
-        }
+
+        $playtime = round($playtime);
+        $output = 'content/' . $index . '_subtitle.srt';
+
+        $subtitle = '';
+        $ini_sec = 1;
+        $end_sec = $playtime + 2;
+        $this->print_step('Criando Subtitle para o vídeo ' . $index);
+
+        $subtitle .= '1' . PHP_EOL;
+        $subtitle .= '00:00:' . str_pad($ini_sec, 2, "0", STR_PAD_LEFT) . ',000 --> 00:00:' . str_pad($end_sec, 2, "0", STR_PAD_LEFT) . ',000' . PHP_EOL;
+        $subtitle .= $sentence . PHP_EOL;
+
+        $file = fopen($output, 'w');
+        fwrite($file, $subtitle);
+        fclose($file);
+        $this->print_step($subtitle);
+        $this->print_step('Subtitle Criado');
+        return $output;
+
     }
 
-    private function createSentenceImage($index)
-    {
-        $output_file = "content/" . $index . "_sentence.png";
-        $standard_width = 1920;
-        $standard_height = 1080;
-
-        $image = new Imagick();
-        $draw = new ImagickDraw();
-        $pixel = new ImagickPixel('transparent');
-        /* New image */
-        $image->newImage(1920, 1080, $pixel);
-        /* Black text */
-        $draw->setFillColor('white');
-        /* Font properties */
-        $draw->setFont('arial');
-        $draw->setFontSize(30);
-        $draw->setTextAlignment(\Imagick::ALIGN_CENTER);
-        $draw->setGravity(\Imagick::GRAVITY_CENTER);
-
-        list($lines, $lineHeight) = $this->wordWrapAnnotation($image, $draw, $this->data[$index]['sentence'], 1000);
-        for ($i = 0; $i < count($lines); $i++){
-            $image->annotateImage($draw, $standard_width/2, ($standard_height/2) + $i * $lineHeight, 0, $lines[$i]);
-            echo $i;
-        }
-
-
-        /* Give image a format */
-        $image->setImageFormat('png');
-        file_put_contents($output_file, $image);
-        $this->print_step('Imagem:"' . $output_file . '" criada');//
-        return $output_file;
-    }
 
     private function wordWrapAnnotation(&$image, &$draw, $text, $maxWidth)
     {
@@ -118,7 +167,6 @@ class Video
         $standard_width = 1920;
         $standard_height = 1080;
 
-
         $image_blur = clone $image;
 
         $image->scaleImage($standard_width, $standard_height, true);
@@ -133,12 +181,14 @@ class Video
 
         $x = 0;
         $y = 0;
-        if ($height == 1080) {
-            $x = ($standard_width - $width) / 2;
-        } else {
-            $y = ($standard_height - $width) / 2;
-        }
 
+        if($width != $standard_height || $height != $standard_height){
+            if ($height == 1080) {
+                $x = ($standard_width - $width) / 2;
+            } else {
+                $y = ($standard_height - $height) / 2;
+            }
+        }
 
         $image_blur->compositeImage($image, Imagick::COMPOSITE_OVER, $x, $y);
 
@@ -151,7 +201,7 @@ class Video
 
     private function print_step($text)
     {
-        echo '[TEXT-PROCESS]->' . $text . PHP_EOL;
+        echo '[VIDEO-PROCESS]->' . $text . PHP_EOL;
     }
 
 
