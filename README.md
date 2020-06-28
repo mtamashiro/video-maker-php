@@ -1,5 +1,8 @@
 # video-maker-php
-Este código gera um vídeo com legenda e áudio de um assunto qualquer
+Este código gera um vídeo com legenda e áudio de um assunto qualquer.<br>
+Me inspirei nesse projeto em Node.js para criar este em PHP:<br>
+<a href="https://github.com/filipedeschamps/video-maker">https://github.com/filipedeschamps/video-maker</a>
+
 
 #Como funciona?
 
