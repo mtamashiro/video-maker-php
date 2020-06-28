@@ -42,7 +42,6 @@ class Text
         curl_setopt($curl, CURLOPT_POSTFIELDS, $params);
         $response = curl_exec($curl);
         $response = json_decode($response);
-
         return $response->result->content;
     }
 
